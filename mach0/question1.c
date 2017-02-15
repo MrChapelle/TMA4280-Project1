@@ -8,16 +8,18 @@
  * n will not exceed a maximum max_rows */
  
 # include <stdio.h>
+# include <stdlib.h>
 # include <math.h>
+# include "question1.h"
 # define max_rows 500000
  
-main(int argc, char **argv)
+double question1()
 {
 	int n = 0;
 	int i = 0;
 	
-	double sum1;
-	double sum2;
+	double sum1 = 0;
+	double sum2 = 0;
 	
 	double array[max_rows];
 	double array2[max_rows];
@@ -47,6 +49,7 @@ main(int argc, char **argv)
 		{
 			array[i] = pow(-1,i)*pow(x1,2*i+1)/(2*i+1);
 			array2[i] = pow(-1,i)*pow(x2,2*i+1)/(2*i+1);
+			
 		}
 	}
 	
@@ -56,11 +59,12 @@ main(int argc, char **argv)
 	{
 		sum1 += array[i];
 		sum2 += array2[i];
+		
 	}
 	
 	result = 4*(4*sum1 -sum2);
 	
-	printf("the approximation of pi is %.15e : ", result); 
+	printf("the approximation of pi is %.15e : \n", result); 
 	
 	return 0;
 	
