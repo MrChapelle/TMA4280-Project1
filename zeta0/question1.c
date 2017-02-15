@@ -1,6 +1,12 @@
+/*
+main.c
+@author : Nicolas Houlier 
+ */
+ 
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include "question1.h"
 
 /* A function which compute pi */
 
@@ -18,18 +24,3 @@ double zeta0sum(int n)
 	// Since the limit for infite n of Sn = pi^2/6, we compute pi from Sn
     return sqrt(6*Sn);
 }    
-
-int main(int argc, char *argv[])
-{
-    int inputNumber = 0;
-    double pival = 0;
-    
-    printf("Enter a number... ");
-    scanf("%d", &inputNumber);
-    
-	// Computation of pi from the number input by the user
-    pival = zeta0sum(inputNumber);
-    printf("the approached value of pi is %f", pival);
-    
-    return 0;
-}
