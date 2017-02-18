@@ -5,7 +5,7 @@ LIBS= -lm
 EXE=exe
 NPROCS?=1
 
-SRCS= question1.c
+SRCS= question1.c utest.c
 OBJS= $(patsubst %.c, %.o, $(SRCS))
 
 %.o: %.cpp

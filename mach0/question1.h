@@ -7,5 +7,5 @@
 # define H_GL_QUESTION1
 
 double question1();
-
+double question1v2(int n);
 # endif

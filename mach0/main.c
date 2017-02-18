@@ -10,11 +10,16 @@
 
 # include "question1.h"
 
+# include "utest.h"
+
 
 
 int main(int argc, char **argv)
 {
+	printf("Question 1 : \n");
 	question1();
+	printf("\nQuestion 2 :\n");
+	utest(3);
 		
 	return EXIT_SUCCESS;
 }
