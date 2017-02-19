@@ -10,11 +10,11 @@ main.c
 
 /* A unit test for question1 */
 
-double test()
+int main(int argc, char *argv[])
 {
-	int n=3;
+	int n = 3;
 	double expected_pi = M_PI;
-	double piZeta = question1();
+	double piZeta = zeta0sum(n);
 	double error = expected_pi - piZeta;
     printf("the error is %f\n", error);
     return 0;
