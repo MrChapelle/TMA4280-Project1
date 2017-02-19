@@ -4,6 +4,7 @@
  * mach method */
 
 # include <stdio.h>
+# include <stdlib.h>
 # include <math.h>
 # include "question1.h"
 

@@ -6,7 +6,7 @@
 # ifndef H_GL_UTEST
 # define H_GL_UTEST
 
-void utest(int n);
+double utest(int n);
 
 # endif
 

@@ -11,6 +11,7 @@
 # include "question1.h"
 
 # include "utest.h"
+# include "vtest.h"
 
 
 
@@ -20,6 +21,10 @@ int main(int argc, char **argv)
 	question1();
 	printf("\nQuestion 2 :\n");
 	utest(3);
-		
+	printf("\nQuestion 3 :\n");
+	
+	vtest(24);
+	
+	
 	return EXIT_SUCCESS;
 }

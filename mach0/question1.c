@@ -11,7 +11,7 @@
 # include <stdlib.h>
 # include <math.h>
 # include "question1.h"
-# define max_rows 500000
+# define max_rows 600000
  
 double question1()
 {
@@ -64,7 +64,7 @@ double question1()
 	
 	result = 4*(4*sum1 -sum2);
 	
-	printf("the approximation of pi is %.15e : \n", result); 
+	printf("the approximation of pi is %.30e : \n", result); 
 	
 	return 0;
 	
@@ -118,7 +118,7 @@ double question1v2(int n)
 	
 	result = 4*(4*sum1 -sum2);
 	
-	printf("the approximation of pi is %.15e : \n", result); 
+	printf("the approximation of pi is %.30e : \n", result); 
 	
 	return result;
 	
