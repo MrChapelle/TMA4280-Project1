@@ -40,6 +40,7 @@ double vtest(int k)
 	fclose(fichier);
 	
 	return 0;
+	
 }
 
 

@@ -11,6 +11,7 @@
 # include <stdio.h>
 # include <stdlib.h>
 # include <math.h>
+# include <time.h>
 
 # include <mpi.h>
 
@@ -19,23 +20,57 @@
 # define send_data_tag 2001
 # define return_data_tag 2002
 
+
 double array[max_rows];
 double array2[max_rows];
 
 double main (int argc , char **argv)
 {
+	FILE *fichier = NULL;
+    
+    fichier = fopen("trash.txt","a");
+    
+    
+	printf("Enter the number of numbers to sum \n");
+	    
+	    
+	float time;
+	clock_t t1,t2;
+	
+	t1 = clock();
+	
 	double x1 = (double)1/5;
 	double x2 = (double)1/239;
 	
 	double sum , partial_sum ;
 	
 	double result = 0;
+	double error = 0;
 	
+	int num_rows;
+	
+	/* I query how many number I will sum in order to distribute the work */
+		
+	
+	scanf("%i", &num_rows);
+	
+	if (fichier != NULL)
+		{
+			fprintf(fichier," n : %i \n", num_rows);
+			
+		}
+		else
+		{
+			printf("there is a problem");
+		}
+	
+		
 	MPI_Status status;
 	
-	int my_id , root_process , ierr , i , num_rows , num_procs ,
+	int my_id , root_process , ierr , i  , num_procs ,
 	    an_id , num_rows_to_receive , avg_rows_per_process , sender , 
 	    num_rows_received , start_row , end_row , num_rows_to_send ;
+	
 	
 	/* Now each process will execute a separate copy of this program */
 	
@@ -47,22 +82,31 @@ double main (int argc , char **argv)
 	ierr = MPI_Comm_rank(MPI_COMM_WORLD , &my_id);
 	ierr = MPI_Comm_size(MPI_COMM_WORLD , &num_procs);
 	
+	
+	if (!(num_procs == 1) && !(num_procs == 2) && !(num_procs == 4) &&
+	    !(num_procs == 8) && !(num_procs == 16) && !(num_procs == 32) &&
+	    !(num_procs == 64) && !(num_procs == 128) && !(num_procs == 256))
+	{
+		printf("invalid number of processes, not a power of 2 ... \n");
+		printf("%i%", num_procs);
+		exit(1);
+	}
+	
+	
+	
 	/* first case : I am the root process : */
 	
 	if (my_id == root_process)
 	{
-		/* I query how many number I will sum in order to distribute the work */
-		
-		printf("Enter the number of numbers to sum \n");
-		scanf("%i", &num_rows);
-		
+				
 		/* I verify that this number is not too big */
 		
 		if (num_rows > max_rows)
 		{
 			printf("Too many numbers \n");
-			exit(1);
+			exit(2);
 		}
+		
 		
 		avg_rows_per_process = num_rows / num_procs ;
 		
@@ -71,7 +115,7 @@ double main (int argc , char **argv)
 		for (i = 0 ; i < num_rows ; i++)
 		{
 			array[i] = (4*(pow(-1,i)*pow(x1,2*i+1))-pow(-1,i)*pow(x2,2*i+1))/(2*i+1);
-			printf("valeurs du tableau %e \n", array[i]);
+			
 		}			
 	
 	    /* Now we distribute a portion of the vector to each child process */
@@ -101,7 +145,7 @@ double main (int argc , char **argv)
 			sum += array[i];
 		}
 		
-		printf("sum %e calculated by the root process \n",sum);
+		//printf("sum %e calculated by the root process \n",sum);
 		
 		/* then we collect the partial sums */
 		
@@ -110,16 +154,35 @@ double main (int argc , char **argv)
 			ierr = MPI_Recv(&partial_sum, 1 , MPI_DOUBLE , MPI_ANY_SOURCE , return_data_tag , MPI_COMM_WORLD , &status);
 			
 			sender = status.MPI_SOURCE;
-			printf("Partial sum %e returned from process %i \n", partial_sum , sender );
+			//printf("Partial sum %e returned from process %i \n", partial_sum , sender );
 			
 			sum += partial_sum ;
 		}
 		
-		printf("The grand total sum is : %e \n", sum);
-		
+				
 		result = 4*sum;
 		
-		printf("The approximated value of pi is %.30e \n" , result);
+		printf("Pi is approached by %.30e \n" , result);
+		error = fabs(M_PI - result);
+		printf("error : %.30e \n", error);
+		
+		t2 = clock();
+		time = (float)(t2-t1)/CLOCKS_PER_SEC;
+		printf("temps execution = %f \n", time);
+		
+		if (fichier != NULL)
+		{
+			fprintf(fichier,"Pi is approached by %.30e \n" , result);
+			fprintf(fichier,"error : %.30e \n", error);
+			fprintf(fichier,"temps execution = %f \n", time);
+			
+		}
+		else
+		{
+			printf("there is a problem");
+		}
+		
+		fclose(fichier);
 			
 	} 
 	
@@ -144,6 +207,8 @@ double main (int argc , char **argv)
 	
 	ierr = MPI_Finalize();
 	
+		
+		
 }
 	
 	
