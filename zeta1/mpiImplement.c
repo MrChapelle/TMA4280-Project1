@@ -12,6 +12,8 @@
 #include <mpi.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
+
 
 #define max_rows 600000
 #define send_data_tag 2001
@@ -23,10 +25,17 @@ double array2[max_rows];
 
 double main(int argc, char **argv) 
 {	
+	FILE *fichier = NULL;
+    fichier = fopen("trash.txt","a");
+	
 	// We ask the user for a number of terms he wants to sum
 	printf("\nEnter a number ... \n");
 	
-	// And we initialize our variables
+	// And we initialize our variables and the clock
+	float time;
+	clock_t t1,t2;
+	t1 = clock();
+	
 	double approachedPi = 0;
 	double error = 0;
 	double sum, partial_sum;
@@ -36,6 +45,12 @@ double main(int argc, char **argv)
 	
 	scanf("%i", &num_rows);
 
+	if (fichier != NULL){
+		fprintf(fichier," n : %i \n", num_rows);
+	}
+	else {
+		printf("there is a problem");
+	}
 	
 	MPI_Status status;
 	ierr = MPI_Init(&argc, &argv);
@@ -45,6 +60,9 @@ double main(int argc, char **argv)
 
 	ierr = MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
 	ierr = MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+	/* if the number of process is not equal to a power of 2, 
+	 * raise an error */
 
 	if (!(num_procs == 1) && !(num_procs == 2) && !(num_procs == 4) &&
 		!(num_procs == 8) && !(num_procs == 16) && !(num_procs == 32) &&
@@ -77,8 +95,8 @@ double main(int argc, char **argv)
 			start_row = an_id*avg_rows_per_process + 1;
 			end_row   = (an_id + 1)*avg_rows_per_process;
 
-			if((num_rows - end_row) < avg_rows_per_process)
-			{
+			if((num_rows - end_row) < avg_rows_per_process){
+				
 				end_row = num_rows - 1;
 			}
 			
@@ -87,24 +105,22 @@ double main(int argc, char **argv)
 			ierr = MPI_Send( &num_rows_to_send, 1 , MPI_INT,
 				  an_id, send_data_tag, MPI_COMM_WORLD);
 
-			ierr = MPI_Send( &array[start_row], num_rows_to_send, MPI_INT,
+			ierr = MPI_Send( &array[start_row], num_rows_to_send, MPI_DOUBLE,
 				  an_id, send_data_tag, MPI_COMM_WORLD);
 		}
 
-		// We and calculate the sum of the values in the segment assigned
-		 *   * to the root process */
+		/* We and calculate the sum of the values in the segment 
+		 * assigned to the root process */
 
 		sum = 0;
 		
-		for(i = 0; i < avg_rows_per_process + 1; i++) 
-		{
+		for(i = 0; i < avg_rows_per_process + 1; i++) {
+			
 			sum += array[i];   
 		} 
 
-		//printf("sum %i calculated by root process\n", sum);
-
-		/* and, finally, I collet the partial sums from the slave processes, 
-		* print them, and add them to the grand sum, and print it */
+		/* We collect the partial sums from the slave processes 
+		 * and add them to the grand sum which is equal to pi²/6 */
 
 		for(an_id = 1; an_id < num_procs; an_id++) {
 			
@@ -112,16 +128,35 @@ double main(int argc, char **argv)
 				  return_data_tag, MPI_COMM_WORLD, &status);
 
 			sender = status.MPI_SOURCE;
-
-			// printf("Partial sum %i returned from process %i\n", partial_sum, sender);
 	 
 			sum += partial_sum;
 		}
 		
+		/* Finally we compute pi from the grand sum and print it,
+		 *  with the error */
+		 
 		approachedPi = sqrt(6*sum);
 		printf("The approached value of pi is: %.30e\n", approachedPi);
 		error = fabs(M_PI - approachedPi);
 		printf("error : %.30e \n", error);
+		
+		t2 = clock();
+		time = (float)(t2-t1)/CLOCKS_PER_SEC;
+		printf("temps execution = %f \n", time);
+		
+		if (fichier != NULL)
+		{
+			fprintf(fichier,"Pi is approached by %.30e \n" , approachedPi);
+			fprintf(fichier,"error : %.30e \n", error);
+			fprintf(fichier,"temps execution = %f \n", time);
+			
+		}
+		else
+		{
+			printf("there is a problem");
+		}
+		
+		fclose(fichier);
 	}
 
 	else {
@@ -132,7 +167,7 @@ double main(int argc, char **argv)
 		ierr = MPI_Recv( &num_rows_to_receive, 1, MPI_INT, 
 		   root_process, send_data_tag, MPI_COMM_WORLD, &status);
 
-		ierr = MPI_Recv( &array2, num_rows_to_receive, MPI_INT, 
+		ierr = MPI_Recv( &array2, num_rows_to_receive, MPI_DOUBLE, 
 		   root_process, send_data_tag, MPI_COMM_WORLD, &status);
 
 		num_rows_received = num_rows_to_receive;
