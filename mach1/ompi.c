@@ -53,6 +53,7 @@ double main (int argc , char **argv)
 		
 	
 	scanf("%i", &num_rows);
+	printf("%i", num_rows);
 	
 	if (fichier != NULL)
 		{
@@ -122,30 +123,30 @@ double main (int argc , char **argv)
 	    
 	    for(an_id = 1 ; an_id < num_procs ; an_id ++)
 	    {
-			start_row = an_id * avg_rows_per_process + 1;
-			end_row = (an_id + 1 ) * avg_rows_per_process;
+			start_row = an_id * avg_rows_per_process;
+			end_row = (an_id + 1) * avg_rows_per_process - 1;
 			
-			if((num_rows - end_row) < avg_rows_per_process)
+			if(an_id == num_procs - 1)
 			{
-				end_row = num_rows - 1;
+				end_row = num_rows +1 ;
 			}
 			
 			num_rows_to_send = end_row - start_row + 1;
 			
 			ierr = MPI_Send(&num_rows_to_send, 1 , MPI_INT , an_id , send_data_tag , MPI_COMM_WORLD);
-			ierr = MPI_Send(&array[start_row], num_rows_to_send , MPI_INT , an_id , send_data_tag , MPI_COMM_WORLD);
+			ierr = MPI_Send(&array[start_row], num_rows_to_send , MPI_DOUBLE , an_id , send_data_tag , MPI_COMM_WORLD);
 			
 		}
 		
 		/* then we calculate the sum of the values affected to the root process */
 		
 		sum = 0;
-		for (i=0;i<avg_rows_per_process + 1 ; i++)
+		for (i=0;i<avg_rows_per_process ; i++)
 		{
 			sum += array[i];
 		}
 		
-		//printf("sum %e calculated by the root process \n",sum);
+		printf("sum %e calculated by the root process \n",sum);
 		
 		/* then we collect the partial sums */
 		
@@ -154,7 +155,7 @@ double main (int argc , char **argv)
 			ierr = MPI_Recv(&partial_sum, 1 , MPI_DOUBLE , MPI_ANY_SOURCE , return_data_tag , MPI_COMM_WORLD , &status);
 			
 			sender = status.MPI_SOURCE;
-			//printf("Partial sum %e returned from process %i \n", partial_sum , sender );
+			printf("Partial sum %e returned from process %i \n", partial_sum , sender );
 			
 			sum += partial_sum ;
 		}
@@ -189,7 +190,7 @@ double main (int argc , char **argv)
 	else
 	{
 		ierr = MPI_Recv(&num_rows_to_receive , 1 , MPI_INT , root_process , send_data_tag , MPI_COMM_WORLD, &status);
-		ierr = MPI_Recv(&array2 , num_rows_to_receive , MPI_INT , root_process , send_data_tag , MPI_COMM_WORLD , &status);
+		ierr = MPI_Recv(&array2 , num_rows_to_receive , MPI_DOUBLE , root_process , send_data_tag , MPI_COMM_WORLD , &status);
 		
 		num_rows_received = num_rows_to_receive ;
 		
