@@ -1,31 +1,47 @@
+/* @Author : You Robin & Houlier Nicolas
+ * @Date : 19/02/17 
+ * Programm which calculate the sum of an array using open MPI 
+ * The root process acts as a master
+ * He sends a portion of the array to each process
+ * Master and child calculate their partial sum
+ * Children send it to the root process
+ * Root process calculate the total sum 
+ * Root process print it */
+
 #include <stdio.h>
 #include <mpi.h>
 #include <stdlib.h>
 #include <math.h>
 
-#define max_rows 100000
+#define max_rows 600000
 #define send_data_tag 2001
 #define return_data_tag 2002
 
-int array[max_rows];
-int array2[max_rows];
 
-main(int argc, char **argv) 
-{
-	long int sum, partial_sum;
+double array[max_rows];
+double array2[max_rows];
+
+double main(int argc, char **argv) 
+{	
+	// We ask the user for a number of terms he wants to sum
+	printf("\nEnter a number ... \n");
+	
+	// And we initialize our variables
+	double approachedPi = 0;
+	double error = 0;
+	double sum, partial_sum;
+	int my_id, root_process, ierr, i, num_rows, num_procs, 
+		an_id, num_rows_to_receive, avg_rows_per_process, sender, 
+		num_rows_received, start_row, end_row, num_rows_to_send;
+	
+	scanf("%i", &num_rows);
+
+	
 	MPI_Status status;
-	int my_id, root_process, ierr, i, num_rows, num_procs,
-	 an_id, num_rows_to_receive, avg_rows_per_process, 
-	 sender, num_rows_received, start_row, end_row, num_rows_to_send;
-
-	/* Now replicte this process to create parallel processes.
-	* From this point on, every process executes a seperate copy
-	* of this program */
-
 	ierr = MPI_Init(&argc, &argv);
 	root_process = 0;
 
-	/* find out MY process ID, and how many processes were started. */
+	// find out MY process ID, and how many processes were started
 
 	ierr = MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
 	ierr = MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -41,14 +57,6 @@ main(int argc, char **argv)
 
 	if(my_id == root_process) {
 
-		/* I must be the root process, so I will query the user
-		* to determine how many numbers to sum. */
-		
-		double error = 0;
-		
-		printf("Enter a number ... ");
-		scanf("%i", &num_rows);
-
 		if(num_rows > max_rows) {
 			printf("Too many numbers.\n");
 			exit(2);
@@ -56,15 +64,16 @@ main(int argc, char **argv)
 
 		avg_rows_per_process = num_rows / num_procs;
 
-		/* initialize an array */
+		// We put each terms in the array
 
-		for(i = 1; i < num_rows; i++) {
-		array[i] = 1./(double)(i*i);
+		for(i = 0; i < num_rows; i++) {
+			array[i] = 1./(double)((i+1)*(i+1));
 		}
 
-		/* distribute a portion of the bector to each child process */
+		/* We distribute a portion of the bector to each child process */
 
 		for(an_id = 1; an_id < num_procs; an_id++) {
+			
 			start_row = an_id*avg_rows_per_process + 1;
 			end_row   = (an_id + 1)*avg_rows_per_process;
 
@@ -82,7 +91,7 @@ main(int argc, char **argv)
 				  an_id, send_data_tag, MPI_COMM_WORLD);
 		}
 
-		/* and calculate the sum of the values in the segment assigned
+		// We and calculate the sum of the values in the segment assigned
 		 *   * to the root process */
 
 		sum = 0;
@@ -99,18 +108,19 @@ main(int argc, char **argv)
 
 		for(an_id = 1; an_id < num_procs; an_id++) {
 			
-			ierr = MPI_Recv( &partial_sum, 1, MPI_LONG, MPI_ANY_SOURCE,
+			ierr = MPI_Recv( &partial_sum, 1, MPI_DOUBLE, MPI_ANY_SOURCE,
 				  return_data_tag, MPI_COMM_WORLD, &status);
 
 			sender = status.MPI_SOURCE;
 
-			printf("Partial sum %i returned from process %i\n", partial_sum, sender);
+			// printf("Partial sum %i returned from process %i\n", partial_sum, sender);
 	 
 			sum += partial_sum;
 		}
-
-		printf("The approached value of pi is: %f\n", sum);
-		error = fabs(M_PI - sum);
+		
+		approachedPi = sqrt(6*sum);
+		printf("The approached value of pi is: %.30e\n", approachedPi);
+		error = fabs(M_PI - approachedPi);
 		printf("error : %.30e \n", error);
 	}
 
@@ -137,7 +147,7 @@ main(int argc, char **argv)
 
 		/* and finally, send my partial sum to hte root process */
 
-		ierr = MPI_Send( &partial_sum, 1, MPI_LONG, root_process, 
+		ierr = MPI_Send( &partial_sum, 1, MPI_DOUBLE, root_process, 
 		return_data_tag, MPI_COMM_WORLD);
 	}
 
