@@ -28,7 +28,7 @@ double main (int argc , char **argv)
 {
 	FILE *fichier = NULL;
     
-    fichier = fopen("trash.txt","a");
+    fichier = fopen("errorp8.txt","a");
     
     
 	printf("Enter the number of numbers to sum \n");
