@@ -25,17 +25,17 @@ double main (int argc , char **argv)
 {
 	printf("Enter the number of numbers to sum \n");
 	
-	double x1 = (double)1/5;
-	double x2 = (double)1/239;
+	
 	double sum;
 	double result;
 	int num_rows;
 	
 	
+	
 	scanf("%i", &num_rows);
 	
 		
-	int i , my_id , num_procs , start_row , end_row , avg_rows_per_process ;
+	int i , my_id , num_procs ;
 	
 	
 	sum = 0;
