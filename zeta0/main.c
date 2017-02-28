@@ -1,6 +1,6 @@
-/*
-main.c
-@author : Nicolas Houlier 
+/* @Author : You Robin & Houlier Nicolas
+ * @Date : 19/02/17 
+ * Programm which compute pi with the zeta method
  */
  
 #include <stdio.h>

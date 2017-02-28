@@ -1,12 +1,13 @@
 /* @Author : You Robin & Houlier Nicolas
  * @Date : 19/02/17 
- * Programm which calculate pi usingthe sum of an array with open MPI 
+ * Programm which calculate the sum of an array using open MPI 
  * The root process acts as a master
  * He sends a portion of the array to each process
  * Master and child calculate their partial sum
  * Children send it to the root process
  * Root process calculate the total sum 
- * Root process computes pi */
+ * Root process print it 
+ * Broadcast the result to all process*/
 
 #include <stdio.h>
 #include <mpi.h>
@@ -88,7 +89,7 @@ double main(int argc, char **argv)
 			array[i] = 1./(double)((i+1)*(i+1));
 		}
 
-		/* We distribute a portion of the bector to each child process */
+		/* We distribute a portion of the vector to each child process */
 
 		for(an_id = 1; an_id < num_procs; an_id++) {
 			
@@ -128,22 +129,25 @@ double main(int argc, char **argv)
 				  return_data_tag, MPI_COMM_WORLD, &status);
 
 			sender = status.MPI_SOURCE;
-	 
 			sum += partial_sum;
+
 		}
 		
+				
 		/* Finally we compute pi from the grand sum and print it,
 		 *  with the error */
 		 
+
 		approachedPi = sqrt(6*sum);
 		printf("The approached value of pi is: %.30e\n", approachedPi);
 		error = fabs(M_PI - approachedPi);
 		printf("error : %.30e \n", error);
 		
+		
 		t2 = clock();
 		time = (float)(t2-t1)/CLOCKS_PER_SEC;
 		printf("temps execution = %f \n", time);
-		
+				
 		if (fichier != NULL)
 		{
 			fprintf(fichier,"Pi is approached by %.30e \n" , approachedPi);
@@ -169,6 +173,9 @@ double main(int argc, char **argv)
 
 		ierr = MPI_Recv( &array2, num_rows_to_receive, MPI_DOUBLE, 
 		   root_process, send_data_tag, MPI_COMM_WORLD, &status);
+		   
+		/*ierr = MPI_Recv( &sum, 1, MPI_DOUBLE, 
+		   root_process, send_data_tag, MPI_COMM_WORLD, &status);*/
 
 		num_rows_received = num_rows_to_receive;
 
@@ -179,13 +186,22 @@ double main(int argc, char **argv)
 		{
 			partial_sum += array2[i];
 		}
-
+		
 		/* and finally, send my partial sum to hte root process */
 
 		ierr = MPI_Send( &partial_sum, 1, MPI_DOUBLE, root_process, 
 		return_data_tag, MPI_COMM_WORLD);
-	}
+		
+		//printf("process %d indicates that the global sum is %d\n", my_id, approachedPi);
 
+	}
+	
+	/*We add a MPI_Bcast function to broadcast the computed value of pi 
+	 * such that all processes store the result, and print it*/
+	
+ierr = MPI_Bcast(&approachedPi, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+printf("process %d indicates that the global sum is %e\n", my_id, approachedPi);
+	
 ierr = MPI_Finalize();
 }
 
