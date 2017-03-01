@@ -1,14 +1,12 @@
-/*
-main.c
-@author : Nicolas Houlier 
- */
+/* @Author : You Robin & Houlier Nicolas
+ * @Date : 19/02/17 
+ * A short test to compute the error between real pi and
+ * the pi computed by the main.c programme using zeta method*/
  
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include "question1.h"
-
-/* A unit test for question1 */
 
 int main(int argc, char *argv[])
 {

@@ -37,6 +37,7 @@ double main(int argc, char **argv)
 	t1 = clock();
 	
 	double approachedPi = 0;
+	double final_sum;
 	double error = 0;
 	double sum, partial_sum;
 	int my_id, root_process, ierr, i, num_rows, num_procs, 
@@ -175,16 +176,35 @@ double main(int argc, char **argv)
 		/* Calculate the sum of my portion of the array */
 
 		partial_sum = 0;
+				
 		for(i = 0; i < num_rows_received; i++) 
 		{
 			partial_sum += array2[i];
 		}
+		
+		/* and finally, send my partial sum to all the process */
+		
+		for(i = 0; i < num_procs; i++) {
+			ierr = MPI_Send( &partial_sum, 1, MPI_DOUBLE, i,
+			return_data_tag, MPI_COMM_WORLD);
+		}
+		
+		/*compute with a double recursive sum for each process*/
 
-		/* and finally, send my partial sum to hte root process */
+		
+		for(an_id = 1; an_id < num_procs; an_id++) {
+			
+			ierr = MPI_Recv( &partial_sum, 1, MPI_DOUBLE, MPI_ANY_SOURCE,
+				  return_data_tag, MPI_COMM_WORLD, &status);
 
-		ierr = MPI_Send( &partial_sum, 1, MPI_DOUBLE, root_process, 
-		return_data_tag, MPI_COMM_WORLD);
+			sender = status.MPI_SOURCE;
+
+			sum += partial_sum;
+		}
+				
 	}
+		
+printf("process %d indicates that the global sum is %e\n", my_id, sum);
 
 ierr = MPI_Finalize();
 }
