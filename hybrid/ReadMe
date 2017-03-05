@@ -1,0 +1,32 @@
+this is the readme file associated to the hybrid folder
+
+
+to compute a program :
+
+please load the module for openmpi :
+
+$ module load openmpi/gcc/64/latest
+
+ compile your file :
+
+$ mpicc -fopenmp zeta.c -o zeta -m64 -lm
+or
+$ mpicc -fopenmp mach.c -o mach -m64 -lm
+
+ set the number of threads :
+
+$ OMP_NUM_THREADS = X
+
+ where X is a power of two (ex 1,2,4,8,16,32 ...)
+
+ run your executable :
+
+$ mpirun -quiet -np Y zeta
+or
+$ mpirun -quiet -np Y mach
+
+where Y is the number of processes for the OpenMPI part
+
+-quiet is here to block a warning message
+
+
