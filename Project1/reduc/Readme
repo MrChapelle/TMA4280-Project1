@@ -1,0 +1,9 @@
+Readme reduc
+
+to load the mpi module : module load openmpi/gcc/64/latest
+
+to compile (no use) : mpicc mpiReduc.c -o mpiReduc -m64 -lm
+or 					  mpicc sumReduc.c -o sumReduc -m64 -lm
+
+to execute : mpirun -np [numberprocess] mpiReduc
+or 			 mpirun -np [numberprocess] sumtReduc

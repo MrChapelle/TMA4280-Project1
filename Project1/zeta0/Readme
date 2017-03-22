@@ -1,0 +1,10 @@
+Readme zeta0
+
+To compute pi with zeta Riemann method :  ./computePi
+
+Tu run the unit test :  make utest
+						./utest
+
+To compute the error abs(pi-pin) for n=2^k with k=1,...,24 :  make vtest
+															  ./vtest
+

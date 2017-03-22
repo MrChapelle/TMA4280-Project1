@@ -1,0 +1,12 @@
+this is the read associated to mach 0
+contrary to zeta0 all the three first questions are executed in one step (easier to run )
+
+to create the makefile :
+
+$   make
+
+to run :
+
+$   ./exe
+
+question 1, 2 3 are clearly distincted

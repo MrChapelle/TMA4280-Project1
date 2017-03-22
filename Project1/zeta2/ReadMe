@@ -1,0 +1,17 @@
+this is the readMe file for zeta2
+
+to compile the omp.c file into omp executable :
+
+$ gcc -fopenmp omp.c -o omp -m64 -lm
+
+to execute with a specified number of thread :
+
+$ OMP_NUM_THREADS = X ./omp
+
+
+where X is a power of , example :
+
+$ OMP_NUM_THREADS = 2 ./omp
+
+
+  
