@@ -311,3 +311,14 @@ temps execution = 0.230000
 Pi is approached by 4.408445338947847069732688396471e+00 
 error : 1.266852685358053953734724927926e+00 
 temps execution = 0.270000 
+ n : 100 
+Pi is approached by 3.132076531809105723880293226102e+00 
+error : 9.516121780687392117670242441818e-03 
+temps execution = 0.200000 
+ n : 0 
+ n : 0 
+ n : 0 
+ n : 0 
+ n : 0 
+ n : 0 
+ n : 0 
