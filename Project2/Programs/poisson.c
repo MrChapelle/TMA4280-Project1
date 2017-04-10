@@ -9,220 +9,190 @@
  *  this code is inspired of the poisson.c program
  * 
  */
+ 
+# include <math.h>
+# include <stdio.h>
+# include <stdlib.h>
+# include <stddef.h>
 
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-
-#define PI 3.14159265358979323846
-#define true 1
-#define false 0
+# define true 1 
+# define false 0 
 
 typedef double real;
 typedef int bool;
 
-// Function prototypes
-real *mk_1D_array(size_t n, bool zero);
-real **mk_2D_array(size_t n1, size_t n2, bool zero);
+// Functions prototypes
+real *make_1D_array (size_t n, bool zero);
+real **make_2D_array (int n1, int n2);
+void fst_(real *v, int *n, real *w, int *nn);
+void fstinv_(real *v, int *n, real *w, int *nn);
 void transpose(real **bt, real **b, size_t m);
 real rhs(real x, real y);
 
-// Functions implemented in FORTRAN in fst.f and called from C.
-// The trailing underscore comes from a convention for symbol names, called name
-// mangling: if can differ with compilers.
-void fst_(real *v, int *n, real *w, int *nn);
-void fstinv_(real *v, int *n, real *w, int *nn);
+
 
 int main(int argc, char **argv)
 {
-    if (argc < 2) {
-        printf("Usage:\n");
-        printf("  poisson n\n\n");
-        printf("Arguments:\n");
-        printf("  n: the problem size (must be a power of 2)\n");
-    }
-
-    /*
-     *  The equation is solved on a 2D structured grid and homogeneous Dirichlet
-     *  conditions are applied on the boundary:
-     *  - the number of grid points in each direction is n+1,
-     *  - the number of degrees of freedom in each direction is m = n-1,
-     *  - the mesh size is constant h = 1/n.
-     */
-    int n = atoi(argv[1]);
-    int m = n - 1;
-    real h = 1.0 / n;
-
-    /*
-     * Grid points are generated with constant mesh size on both x- and y-axis.
-     */
-    real *grid = mk_1D_array(n+1, false);
-    for (size_t i = 0; i < n+1; i++) {
-        grid[i] = i * h;
-    }
-
-    /*
-     * The diagonal of the eigenvalue matrix of T is set with the eigenvalues
-     * defined Chapter 9. page 93 of the Lecture Notes.
-     * Note that the indexing starts from zero here, thus i+1.
-     */
-    real *diag = mk_1D_array(m, false);
-    for (size_t i = 0; i < m; i++) {
-        diag[i] = 2.0 * (1.0 - cos((i+1) * PI / n));
-    }
-
-    /*
-     * Allocate the matrices b and bt which will be used for storing value of
-     * G, \tilde G^T, \tilde U^T, U as described in Chapter 9. page 101.
-     */
-    real **b = mk_2D_array(m, m, false);
-    real **bt = mk_2D_array(m, m, false);
-
-    /*
-     * This vector will holds coefficients of the Discrete Sine Transform (DST)
-     * but also of the Fast Fourier Transform used in the FORTRAN code.
-     * The storage size is set to nn = 4 * n, look at Chapter 9. pages 98-100:
-     * - Fourier coefficients are complex so storage is used for the real part
-     *   and the imaginary part.
-     * - Fourier coefficients are defined for j = [[ - (n-1), + (n-1) ]] while 
-     *   DST coefficients are defined for j [[ 0, n-1 ]].
-     * As explained in the Lecture notes coefficients for positive j are stored
-     * first.
-     * The array is allocated once and passed as arguments to avoid doings 
-     * reallocations at each function call.
-     */
-    int nn = 4 * n;
-    real *z = mk_1D_array(nn, false);
-
-    /*
-     * Initialize the right hand side data for a given rhs function.
-     * Note that the right hand-side is set at nodes corresponding to degrees
-     * of freedom, so it excludes the boundary (bug fixed by petterjf 2017).
-     * 
-     */
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < m; j++) {
-            b[i][j] = h * h * rhs(grid[i+1], grid[j+1]);
-        }
-    }
-
-    /*
-     * Compute \tilde G^T = S^-1 * (S * G)^T (Chapter 9. page 101 step 1)
-     * Instead of using two matrix-matrix products the Discrete Sine Transform
-     * (DST) is used.
-     * The DST code is implemented in FORTRAN in fsf.f and can be called from C.
-     * The array zz is used as storage for DST coefficients and internally for 
-     * FFT coefficients in fst_ and fstinv_.
-     * In functions fst_ and fst_inv_ coefficients are written back to the input 
-     * array (first argument) so that the initial values are overwritten.
-     */
-    for (size_t i = 0; i < m; i++) {
-        fst_(b[i], &n, z, &nn);
-    }
-    transpose(bt, b, m);
-    for (size_t i = 0; i < m; i++) {
-        fstinv_(bt[i], &n, z, &nn);
-    }
-
-    /*
-     * Solve Lambda * \tilde U = \tilde G (Chapter 9. page 101 step 2)
-     */
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < m; j++) {
-            bt[i][j] = bt[i][j] / (diag[i] + diag[j]);
-        }
-    }
-
-    /*
-     * Compute U = S^-1 * (S * Utilde^T) (Chapter 9. page 101 step 3)
-     */
-    for (size_t i = 0; i < m; i++) {
-        fst_(bt[i], &n, z, &nn);
-    }
-    transpose(b, bt, m);
-    for (size_t i = 0; i < m; i++) {
-        fstinv_(b[i], &n, z, &nn);
-    }
-
-    /*
-     * Compute maximal value of solution for convergence analysis in L_\infty
-     * norm.
-     */
-    double u_max = 0.0;
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < m; j++) {
-            u_max = u_max > b[i][j] ? u_max : b[i][j];
-        }
-    }
-
-    printf("u_max = %e\n", u_max);
-
-    return 0;
+	
+	if (argc < 2) {
+		printf("Problem because n must be a power of 2 \n");
+	}
+	// Real time= WallTime();
+	
+	// The number of grid points in each direction is n+1
+	// The number of degrees of freedom in each directions is n-1
+	
+	int n = atoi(argv[1]);
+	int m = n - 1;
+	int nn = 4*n;
+	real h = 1.0/n;
+	
+	
+	// we define our grid of points 
+	
+	real *grid = make_1D_array(n+1, false);
+	
+	// we affect the values to our grid of points
+	
+	for (size_t i = 0; i < n+1; i++) {
+		grid[i] = i * h;
+	}
+	
+	// T = Q*LAMBDA*Qt because T is symetrical so can be diagonalised
+	// LAMBDA is the matrix of eigenvalue
+	// Q is the matrix of eigenvectors [columns]
+	
+	// we create the diagonal of the eigenvalue of matrix T :
+	// T in R(n-1*n-1)
+	
+	real *diag = make_1D_array(m, false);
+	
+	for (size_t i = 0; i < m ; i++) {
+		diag[i] =  2.0 * (1.0 - cos((i+1) * 3.14159 / n));
+	}
+	
+	// Now we initialise the right hand side , G
+	// We have G = h²* Fmatrix 
+	// fij = rhs (grid[i] , grid[j]) because rhs define f(x,y)
+	
+	real **b = make_2D_array(m,m);
+	real **bt = make_2D_array(m,m);
+	
+	// we define the vector z which will contain the Fourier complex 
+	// coefficients on -f +f 
+	real *z = make_1D_array(nn, false);
+	
+	// We actualise the coefficient of b
+	
+	for (size_t i = 0; i<m; i++) {
+		for (size_t j=0; j<m;j++) {
+			b[i][j] = h * h * rhs(grid[i+1], grid[j+1]);
+		}
+	}
+	
+	// Now we will do the first step of the resolution
+	// We will calculate : GtildeT = QtGQ ie Btilde^T = S^-1 * (S * B)^T
+	
+	for (size_t i = 0 ; i < m ; i++) {
+		fst_(b[i], &n, z, &nn);
+	}
+	
+	// now we transpose SG ie SB :
+	
+	transpose(bt,b,m);
+	
+	// now we calculate S-1 * bt
+	
+	for (size_t i = 0; i < m; i++) {
+		fstinv_(bt[i], &n , z , &nn);
+	}
+	
+	// the first step is done in O(n²logn)
+	
+	// now we begin the second step 
+	// we want to solve Lambda * Xtilde = Btilde
+	// ie : Utilde(ij) = Btilde(ij)/(lj + li)
+	
+	for (size_t i=0; i<m; i ++) {
+		for (size_t j=0; j<m; j++) {
+			bt[i][j] = bt[i][j] / ( diag[i] + diag[j]);
+		}
+	}
+	
+	// the second step is done in O(n²)
+	
+	// now we begin the third step
+	// calculate U in O(n²logn) ie X= S^-1 * ( S * Xtilde)^T
+	
+	for (size_t i = 0; i < m ; i++) {
+		fst_(bt[i], &n, z, &nn);
+	}
+	
+	transpose(b,bt,m);
+	
+	for (size_t i = 0; i < m; i++) {
+		fstinv_(b[i], &n, z, &nn);
+	}
+	
+	// the third step is done
+	
+	// we want to return the maximum of our solution U 
+	
+	double u_max = 0.0;
+	
+	for (size_t i=0; i<m;i++) {
+		for (size_t j=0; j<m;j++) {
+			u_max = u_max > b[i][j] ? u_max : b[i][j];
+		}
+	}
+	
+	printf("u_max = %e\n", u_max);
+	
+	
+	return 0;	
+	
 }
 
-/*
- * This function is used for initializing the right-hand side of the equation.
- * Other functions can be defined to swtich between problem definitions.
- */
 
-real rhs(real x, real y) {
-    return 2 * (y - y*y + x - x*x);
+// Other Functions 
+
+real *make_1D_array(size_t n, bool zero)
+{
+	if (zero) {
+		return (real *)calloc(n, sizeof(real));
+	}
+	return (real *)malloc(n * sizeof(real));
 }
 
-/*
- * Write the transpose of b a matrix of R^(m*m) in bt.
- * In parallel the function MPI_Alltoallv is used to map directly the entries
- * stored in the array to the block structure, using displacement arrays.
- */
+real **make_2D_array(int n1, int n2)
+{
+	real **ret;
+	ret = (real **)malloc(n1   *sizeof(real *));
+	ret[0] = (real  *)malloc(n1*n2*sizeof(real));
+	for (int i=1; i < n1; i++) {
+		ret[i] = ret[i-1] + n2;
+	}
+	int n = n1*n2;
+	memset(ret[0],0,n*sizeof(real));
+	return ret;
+}
+
 
 void transpose(real **bt, real **b, size_t m)
 {
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < m; j++) {
-            bt[i][j] = b[j][i];
-        }
-    }
+	// the transpose of b is set into bt
+	for (size_t i = 0; i < m; i++) {
+		for (size_t j = 0; j < m; j++){
+			bt[i][j] = b[j][i];
+		}
+	}
 }
 
-/*
- * The allocation of a vectore of size n is done with just allocating an array.
- * The only thing to notice here is the use of calloc to zero the array.
- */
-
-real *mk_1D_array(size_t n, bool zero)
-{
-    if (zero) {
-        return (real *)calloc(n, sizeof(real));
-    }
-    return (real *)malloc(n * sizeof(real));
+real rhs(real x, real y) {
+	return 2 * (y - y*y + x - x*x);
 }
 
-/*
- * The allocation of the two-dimensional array used for storing matrices is done
- * in the following way for a matrix in R^(n1*n2):
- * 1. an array of pointers is allocated, one pointer for each row,
- * 2. a 'flat' array of size n1*n2 is allocated to ensure that the memory space
- *   is contigusous,
- * 3. pointers are set for each row to the address of first element.
- */
 
-real **mk_2D_array(size_t n1, size_t n2, bool zero)
-{
-    // 1
-    real **ret = (real **)malloc(n1 * sizeof(real *));
 
-    // 2
-    if (zero) {
-        ret[0] = (real *)calloc(n1 * n2, sizeof(real));
-    }
-    else {
-        ret[0] = (real *)malloc(n1 * n2 * sizeof(real));
-    }
-    
-    // 3
-    for (size_t i = 1; i < n1; i++) {
-        ret[i] = ret[i-1] + n2;
-    }
-    return ret;
-}
+

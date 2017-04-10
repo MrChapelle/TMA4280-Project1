@@ -24,8 +24,8 @@ typedef int Bool;
 
 
 // functions prototypes
-Real *make_1D_array (size_t n, Bool zero);
-Real **make_2D_array (size_t n1, size_t n2, Bool zero);
+Real *make_1D_array (int n, Bool zero);
+Real **make_2D_array (int n1, int n2);
 void fst_(Real *v, int *n, Real *w, int *nn);
 void fstinv_(Real *v, int *n, Real *w, int *nn);
 void transpose(Real **Mat, int size, int m, int n, int avg_num , int last_avg_num);
@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 	if (argc < 2) {
 		printf("Problem because n must be a power of 2");
 	}
-	
+	Real **Mat;
 	int rank;
 	int size;
 	int n = atoi(argv[1]);
@@ -62,6 +62,88 @@ int main(int argc, char **argv)
 	
 	int avg_glob = floor(m/size); // nombre moyen de rows par process
 	int avg_num = avg_glob * avg_glob; // average number of elements per process
+	int last = avg_glob; // in case it's the last process
+	int recvcounts = m - (size-1) * avg_glob; 
+	int last_avg_num = avg_glob * recvcounts;
+	
+	if(rank+1 == size) {
+    last   = recvcounts;
+    avg_num  = last_avg_num;
+    last_avg_num = recvcounts * recvcounts;
+	}
+	
+	Real *diag = make_1D_array(m , false);
+	
+	Real *z = make_1D_array (nn, false);
+	
+	Mat = make_2D_array (last,m);
+	
+	Real time = MPI_Wtime();
+	
+	for (int i=0; i < m; i++) {
+		diag[i] = 2.*(1.-cos((i+1)*pi/(Real)n));
+	}
+	
+	for (int j=0; j < last; j++) {
+		for (int i=0; i < m; i++) {
+		//        h^2 * f(x,y)
+		//Mat[j][i] = h*h*5*pi*pi*sin(pi*i*h)*sin(2*pi*(j + rank*avg_glob)*h);
+		Mat[i][j] = h*h*rhs((i+1)*h,(j+1)*h);
+		}
+	}
+  
+	for (int j=0; j < last; j++) {
+		fst_(Mat[j], &n, z, &nn);
+	}
+
+	transpose(Mat, size,last, m, avg_num, last_avg_num);
+
+	for (int i=0; i < last; i++) {
+		fstinv_(Mat[i], &n, z, &nn);
+	}  
+
+	for (int j=0; j < last; j++) {
+		for (int i=0; i < m; i++) {
+		Mat[j][i] = Mat[j][i]/(diag[i]+diag[j + rank*avg_glob]);
+		}
+	}
+  
+	for (int i=0; i < last; i++) {
+		fst_(Mat[i], &n, z, &nn);
+	}
+
+	transpose(Mat, size, last, m, avg_num, last_avg_num);
+
+	for (int j=0; j < last; j++) {
+		fstinv_(Mat[j], &n, z, &nn);
+	}
+
+	Real umax = 0.0;
+	Real emax = 0.0;
+	
+	for (int j=0; j < last; j++) {
+		for (int i=0; i < m; i++) {
+		// error =  abs( numerical u(x,y) - exact u(x,y) )
+		Real error = fabs(Mat[j][i] - sin(pi*i*h)*sin(2*pi*(j + rank*avg_num)*h));
+		if (Mat[j][i] > umax) umax = Mat[j][i];
+		if (error > emax) emax = error;
+		}
+	}
+	Real globalumax;
+	Real globalemax;
+
+	MPI_Reduce (&umax, &globalumax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	MPI_Reduce (&emax, &globalemax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	if (rank == 0)
+	{
+		printf("elapsed: %f\n", MPI_Wtime()-time);
+		printf ("umax = %e \n",globalumax);
+		printf ("emax = %e \n",globalemax);
+	}
+
+	
+  
+  
 	
 	
 	MPI_Finalize();
@@ -167,7 +249,7 @@ Real rhs(Real x, Real y)
 	return 2 * (y - y*y + x - x*x);
 }
 
-Real *make_1D_array(size_t n, Bool zero)
+Real *make_1D_array(int n, Bool zero)
 {
 	if (zero) {
 		return (Real *)calloc(n, sizeof(Real));
@@ -175,19 +257,16 @@ Real *make_1D_array(size_t n, Bool zero)
 	return (Real *)malloc(n * sizeof(Real));
 }
 
-Real **make_2D_array(size_t n1, size_t n2, Bool zero)
+Real **make_2D_array(int n1, int n2)
 {
-	Real **ret = (Real **)malloc(n1 * sizeof(Real *));
-	
-	if (zero) {
-		ret[0] = (Real *)calloc(n1 * n2, sizeof(Real));
-	}
-	else {
-		ret[0] = (Real *)malloc(n1 * n2 * sizeof(Real));
-	}
-	for (size_t i = 1; 1 < n1 ; i++) {
+	Real **ret;
+	ret = (Real **)malloc(n1   *sizeof(Real *));
+	ret[0] = (Real  *)malloc(n1*n2*sizeof(Real));
+	for (int i=1; i < n1; i++) {
 		ret[i] = ret[i-1] + n2;
 	}
+	int n = n1*n2;
+	memset(ret[0],0,n*sizeof(Real));
 	return ret;
 }	
 	
