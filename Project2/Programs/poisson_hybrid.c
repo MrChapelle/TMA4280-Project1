@@ -1,5 +1,4 @@
-/* Implementation of the solution to the Poisson problem on [0,1]*[0,1] in a hybrid implementation
- * OPEN MP & MPI
+/* Implementation of the solution to the Poisson problem on [0,1]*[0,1] in an hybrid implementation
  * with a right hand side f . 
  * 
  *  @ authors : You Robin - Houlier Nicolas
@@ -9,218 +8,273 @@
  * 
  */
 
-
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <memory.h>
-#include <math.h>
-#include <omp.h>
-#include <mpi.h>
+# include <mpi.h>
+# include <math.h>
+# include <stdio.h>
+# include <stdlib.h>
+# include <memory.h>
+# include <stddef.h>
+# include <omp.h>
 
 typedef double Real;
+typedef int Bool;
 
-/* function prototypes */
-Real *createRealArray (int n);
-Real **createReal2DArray (int m, int n);
+# define pi 4.*atan(1.)
+# define true 1 
+# define false 0 
+
+
+// functions prototypes
+Real *make_1D_array (int n, Bool zero);
+Real **make_2D_array (int n1, int n2);
 void fst_(Real *v, int *n, Real *w, int *nn);
 void fstinv_(Real *v, int *n, Real *w, int *nn);
-void transpose (Real **A, int m, int n, int size, int bb, int bre);
-void fillA (Real **A, Real *V, int *re, int *rd, int m, int n, int size);
+void transpose(Real **Mat, int size, int m, int n, int avg_num , int last_avg_num);
+Real rhs(Real x, Real y);
 
-int main(int argc, char **argv )
+// we are working with mpi so the function walltime is given with mpi_walltime !
+
+
+// main : 
+
+int main(int argc, char **argv)
 {
-  Real *diag, **A;
-  Real pi, h, umax, globalumax, emax, globalemax, error, time;
-  int n, m, nn, b, re, l, bb, bre, rank, size;
+	
+	if (argc < 2) {
+		printf("Problem because n must be a power of 2");
+	}
+	Real **Mat;
+	int rank;
+	int size;
+	int n = atoi(argv[1]);
+	
+	
+	MPI_Init (&argc, &argv);
+	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
+	MPI_Comm_size (MPI_COMM_WORLD, &size);
+	
+	/* the total number of grid points in each direction is (n+1)
+	 * the total number of degree of freedom in each direction is (n-1)
+	*/
+	
+	int m = n - 1;
+	int nn = 4*n;
+	Real h = 1.0/n;
+	
+	int avg_glob = floor(m/size); // nombre moyen de rows par process
+	int avg_num = avg_glob * avg_glob; // average number of elements per process
+	int last = avg_glob; // in case it's the last process
+	int recvcounts = m - (size-1) * avg_glob; 
+	int last_avg_num = avg_glob * recvcounts;
+	
+	if(rank+1 == size) {
+    last   = recvcounts;
+    avg_num  = last_avg_num;
+    last_avg_num = recvcounts * recvcounts;
+	}
+	
+	Real *diag = make_1D_array(m , false);
+	
+	Real *z = make_1D_array (nn, false);
+	
+	Mat = make_2D_array (last,m);
+	
+	Real time = MPI_Wtime();
+	
+	#pragma omp parallel for schedule(static)
+	for (int i=0; i < m; i++) {
+		diag[i] = 2.*(1.-cos((i+1)*pi/(Real)n));
+	}
+	
+	#pragma omp parallel for schedule(static)
+	for (int j=0; j < last; j++) {
+		for (int i=0; i < m; i++) {
+		//        h^2 * f(x,y)
+		//Mat[j][i] = h*h*5*pi*pi*sin(pi*i*h)*sin(2*pi*(j + rank*avg_glob)*h);
+		Mat[i][j] = h*h*rhs((i+1)*h,(j+1)*h);
+		}
+	}
+	
+	#pragma omp parallel for schedule(static)
+	for (int j=0; j < last; j++) {
+		fst_(Mat[j], &n, z, &nn);
+	}
 
-  MPI_Init (&argc, &argv);
-  MPI_Comm_rank (MPI_COMM_WORLD, &rank);
-  MPI_Comm_size (MPI_COMM_WORLD, &size);
+	transpose(Mat, size,last, m, avg_num, last_avg_num);
+	
+	#pragma omp parallel for schedule(static)
+	for (int i=0; i < last; i++) {
+		fstinv_(Mat[i], &n, z, &nn);
+	}  
 
-  /* the total number of grid points in each spatial direction is (n+1) */
-  /* the total number of degrees-of-freedom in each spatial direction is (n-1) */
-  /* this version requires n to be a power of 2 */
+	for (int j=0; j < last; j++) {
+		for (int i=0; i < m; i++) {
+		Mat[j][i] = Mat[j][i]/(diag[i]+diag[j + rank*avg_glob]);
+		}
+	}
+	
+	#pragma omp parallel for schedule(static)
+	for (int i=0; i < last; i++) {
+		fst_(Mat[i], &n, z, &nn);
+	}
 
- if( argc < 2 ) {
-    printf("need a problem size\n");
+	transpose(Mat, size, last, m, avg_num, last_avg_num);
+	
+	#pragma omp parallel for schedule(static)
+	for (int j=0; j < last; j++) {
+		fstinv_(Mat[j], &n, z, &nn);
+	}
+
+	Real umax = 0.0;
+	Real emax = 0.0;
+	
+	for (int j=0; j < last; j++) {
+		for (int i=0; i < m; i++) {
+		// error =  abs( numerical u(x,y) - exact u(x,y) )
+		Real error = fabs(Mat[j][i] - sin(pi*i*h)*sin(2*pi*(j + rank*avg_num)*h));
+		if (Mat[j][i] > umax) umax = Mat[j][i];
+		if (error > emax) emax = error;
+		}
+	}
+	Real globalumax;
+	Real globalemax;
+
+	MPI_Reduce (&umax, &globalumax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	MPI_Reduce (&emax, &globalemax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	if (rank == 0)
+	{
+		printf("elapsed: %f\n", MPI_Wtime()-time);
+		printf ("umax = %e \n",globalumax);
+		printf ("emax = %e \n",globalemax);
+	}
+
+	
+  	
+	MPI_Finalize();
+	printf("Need to be completed \n");
 	return 0;
-  }
-
-  n  = atoi(argv[1]);
-  m  = n-1;
-  nn = 4*n;
-
-  h    = 1./(Real)n;
-  pi   = 4.*atan(1.);
-
-  b   = floor(m/size);
-  re  = m - (size-1)*b;
-  l   = b;
-  bb  = b*b;
-  bre = b*re;
-
-  if(rank+1 == size) {
-    l   = re;
-    bb  = bre;
-    bre = re*re;
-  }
-
-  diag = createRealArray (m);
-  A    = createReal2DArray (l,m);
-
-  time = MPI_Wtime();
-
-  #pragma omp parallel for schedule(static)
-  for (int i=0; i < m; i++) {
-    diag[i] = 2.*(1.-cos((i+1)*pi/(Real)n));
-  }
-
-  #pragma omp parallel for schedule(static)
-  for (int j=0; j < l; j++) {
-    for (int i=0; i < m; i++) {
-      //        h^2 * f(x,y)
-      A[j][i] = h*h*5*pi*pi*sin(pi*i*h)*sin(2*pi*(j + rank*b)*h);
-    }
-  }
-  
-  #pragma omp parallel for schedule(static)
-  for (int j=0; j < l; j++) {
-    Real *z = createRealArray (nn);
-    fst_(A[j], &n, z, &nn);
-  }
-
-  transpose(A, l, m, size, bb, bre);
-
-  #pragma omp parallel for schedule(static)
-  for (int i=0; i < l; i++) {
-    Real *z = createRealArray (nn);
-    fstinv_(A[i], &n, z, &nn);
-  }  
-
-  for (int j=0; j < l; j++) {
-    for (int i=0; i < m; i++) {
-      A[j][i] = A[j][i]/(diag[i]+diag[j + rank*b]);
-    }
-  }
-  
-  #pragma omp parallel for schedule(static)
-  for (int i=0; i < l; i++) {
-    Real *z = createRealArray (nn);
-    fst_(A[i], &n, z, &nn);
-  }
-
-  transpose(A, l, m, size, bb, bre);
-
-  #pragma omp parallel for schedule(static)
-  for (int j=0; j < l; j++) {
-    Real *z = createRealArray (nn);
-    fstinv_(A[j], &n, z, &nn);
-  }
-
-  umax = 0.0;
-  emax = 0.0;
-  for (int j=0; j < l; j++) {
-    for (int i=0; i < m; i++) {
-      // error =  abs( numerical u(x,y) - exact u(x,y) )
-      error = fabs(A[j][i] - sin(pi*i*h)*sin(2*pi*(j + rank*b)*h));
-      if (A[j][i] > umax) umax = A[j][i];
-      if (error > emax) emax = error;
-    }
-  }
-
-  MPI_Reduce (&umax, &globalumax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-  MPI_Reduce (&emax, &globalemax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-  if (rank == 0)
-  {
-    printf("elapsed: %f\n", MPI_Wtime()-time);
-    printf ("umax = %e \n",globalumax);
-    printf ("emax = %e \n",globalemax);
-  }
-
-  MPI_Finalize();
-  return 0;
 }
 
-Real *createRealArray (int n)
+
+// other functions :
+
+void transpose (Real **Mat, int size, int m, int n, int avg_num, int last_avg_num)
 {
-  Real *a;
-  int i;
-  a = (Real *)malloc(n*sizeof(Real));
-  for (i=0; i < n; i++) {
-    a[i] = 0.0;
-  }
-  return (a);
+	// we will follow the hint and use the function MPI_Alltoallv
+	// we define our values :
+	
+	// starting address of send buffer (choice) 
+	Real *sendbuf = make_1D_array(n*m, false);
+	
+	//address of receive buffer (choice) 
+	Real *recvbuf = make_1D_array(n*m , false);
+	
+	// integer array equal to the group size specifying the
+	// maximum number of elements that can be received from each processor 
+	int recvcounts[size];
+	
+	// integer array equal to the group size specifying the maximum number of elems 
+	// that can be received from each processor 
+	int rdispls[size];
+	
+	// integer array equal to the group size specifying the number of elements to send to each processor
+	int sendcounts[size];
+	
+	// integer array (of length group size). Entry j specifies the displacement (relative to 
+	// sendbuf from which to take the outgoing data destined for process j
+	int sdispls[size];
+	
+	// we actualise the values of the parameters :
+	
+	#pragma omp parallel for schedule(static)
+	for (int i=0; i < size; i++) {
+		
+		sendcounts[i] = avg_num;
+		recvcounts[i] = sendcounts[i];
+		
+		sdispls[i] = avg_num * i ;
+		rdispls[i] = sdispls[i];
+	}
+	
+	// we have to be more precise for the last row, the number of rows is not the same
+	
+	sendcounts[size - 1] = last_avg_num;
+	recvcounts[size - 1] = sendcounts[size - 1];
+	
+	// we spread the information 
+	
+	#pragma omp parallel for schedule(static)
+	for (int i = 0; i<n; i++) {
+		for (int j = 0; j < m; j++) {
+			sendbuf[i*m + j] = Mat[j][i];
+		}
+	}
+	
+	
+	// now we apply our MPI_Alltoallv function :
+	
+	MPI_Alltoallv ( sendbuf , sendcounts , sdispls , MPI_DOUBLE , recvbuf ,
+					recvcounts , rdispls , MPI_DOUBLE , MPI_COMM_WORLD);
+					
+	// now that we have the information 
+	// we can actualise the value of Mat
+	
+	int recvamounts[size];
+	
+	#pragma omp parallel for schedule(static)
+	for (int k = 0; k < size ; k++) {
+		recvamounts[k] = recvcounts[k]/m;
+	}
+	
+	// we actualise Mat 
+	
+	#pragma omp parallel for schedule(static)
+	for (int i = 0; i < m ; i++) {
+		
+		int id = 0;
+		int val_int = rdispls[id] + recvamounts[id]*i; // same as line 86
+		int val_f = val_int + recvamounts[id] -1;
+		
+		for (int j = 0; j < n; j++) {
+			Mat[i][j] = sendbuf[val_int];
+			
+			// if it is the last one :
+			
+			if (val_int == val_f) {
+				id ++;
+				val_int = rdispls[id] + recvamounts[id]*i; // same as line 110
+				val_f = val_int + recvamounts[id] -1; // same as line 111
+			}
+			else {
+				val_int++;
+			}
+		}
+	}
 }
 
-Real **createReal2DArray (int n1, int n2)
+Real rhs(Real x, Real y)
 {
-  int i, n;
-  Real **a;
-  a    = (Real **)malloc(n1   *sizeof(Real *));
-  a[0] = (Real  *)malloc(n1*n2*sizeof(Real));
-  for (i=1; i < n1; i++) {
-    a[i] = a[i-1] + n2;
-  }
-  n = n1*n2;
-  memset(a[0],0,n*sizeof(Real));
-  return (a);
+	return 2 * (y - y*y + x - x*x);
 }
 
-void transpose (Real **A, int m, int n, int size, int bb, int bre)
+Real *make_1D_array(int n, Bool zero)
 {
-  int se[size], sd[size], re[size], rd[size];
-  Real *V = createRealArray (n*m);
-  Real *Vt = createRealArray (n*m);
-
-  #pragma omp parallel for schedule(static)
-  for (int i = 0; i < size; ++i) {
-    se[i] = bb;
-    sd[i] = bb*i;
-    re[i] = bb;
-    rd[i] = bb*i;
-  }
-  se[size-1] = bre;
-  re[size-1] = bre;
-
-  #pragma omp parallel for schedule(static)
-  for(int i = 0; i < n; i++) {
-    for(int j = 0; j < m; j++) {
-      V[j + i*m] = A[j][i];
-    }
-  }
-
-  MPI_Alltoallv(V, se, sd, MPI_DOUBLE, Vt, re, rd, MPI_DOUBLE, MPI_COMM_WORLD);
-  fillA(A, Vt, re, rd, m, n, size);
+	if (zero) {
+		return (Real *)calloc(n, sizeof(Real));
+	}
+	return (Real *)malloc(n * sizeof(Real));
 }
 
-void fillA (Real **A, Real *V, int *re, int *rd, int m, int n, int size)
+Real **make_2D_array(int n1, int n2)
 {
-  int rem[size];
-
-  #pragma omp parallel for schedule(static)
-  for (int i = 0; i < size; ++i) {
-    rem[i] = re[i]/m;
-  }
-
-  #pragma omp parallel for schedule(static)
-  for (int i = 0; i < m; i++) {
-    int r, k, k1;
-
-    r  = 0;
-    k  = rd[r] + rem[r]*i;
-    k1 = k + rem[r] - 1;
-
-    for (int j = 0; j < n; j++) {
-      A[i][j] = V[k];
-
-      if(k == k1) {
-        r++;
-        k  = rd[r] + rem[r]*i;
-        k1 = k + rem[r] - 1;
-      } else {
-        k++;
-      }
-    }
-  }
-}
+	Real **ret;
+	ret = (Real **)malloc(n1   *sizeof(Real *));
+	ret[0] = (Real  *)malloc(n1*n2*sizeof(Real));
+	for (int i=1; i < n1; i++) {
+		ret[i] = ret[i-1] + n2;
+	}
+	int n = n1*n2;
+	memset(ret[0],0,n*sizeof(Real));
+	return ret;
+}	
+	
