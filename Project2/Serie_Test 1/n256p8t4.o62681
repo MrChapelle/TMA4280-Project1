@@ -1,0 +1,6 @@
+/home/robinay/Projet
+Grid size: n = 256, World size = 16, Rows per process: m = 16, Set number of threads: t = 4
+u_max = 9.993650e-01
+Time elapsed: 0.119378
+Max absolute error: 0.00004266
+
