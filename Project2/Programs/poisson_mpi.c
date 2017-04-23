@@ -60,6 +60,10 @@ int main(int argc, char **argv)
 	int nn = 4*n;
 	Real h = 1.0/n;
 	
+	int p = size;
+	int r = m % p;
+	int np = m/p + (rank < r);
+	
 	int avg_glob = floor(m/size); // nombre moyen de rows par process
 	int avg_num = avg_glob * avg_glob; // average number of elements per process
 	int last = avg_glob; // in case it's the last process
@@ -88,7 +92,7 @@ int main(int argc, char **argv)
 		for (int i=0; i < m; i++) {
 		//        h^2 * f(x,y)
 		//Mat[j][i] = h*h*5*pi*pi*sin(pi*i*h)*sin(2*pi*(j + rank*avg_glob)*h);
-		Mat[i][j] = h*h*rhs((i+1)*h,(j+1)*h);
+		Mat[j][i] = h*h*rhs((j+1)*h,(i+1)*h);
 		}
 	}
   
