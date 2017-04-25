@@ -372,8 +372,8 @@ void show_matrix(Real **b, int avg, int n) {
 */
 
 void p_transpose(Real **bt, Real **b, Real *send, Real *recv, int size, int avg, int n, int rank) {
-  size_t i, j;
-  //#pragma omp parallel for collapse(2)
+  size_t i;
+  size_t j;  
   for (i=0; i<(size_t)avg; i++) {
     for (j=0; j<(size_t)n; j++) {
       send[avg*i + (j/avg)*(avg*avg) + j%avg] = b[i][j];

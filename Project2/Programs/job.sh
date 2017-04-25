@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N q5test2bis 
+#PBS -N robin_nicolas 
 #PBS -q training
 #PBS -A imf_lille-tma4280
 #PBS -W group_list=imf_lille-tma4280
