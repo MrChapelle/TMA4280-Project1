@@ -25,6 +25,8 @@ typedef int Bool;
 
 Real *mk_1D_array(size_t n, Bool zero);
 Real **mk_2D_array(size_t n1, size_t n2, Bool zero);
+
+// given function
 Real rhs(Real x, Real y);
 
 // Function related to unit tests 
@@ -64,14 +66,17 @@ int main(int argc, char **argv)
 	int size;
 	
     MPI_Init(&argc, &argv);
+    
+    // we obtain the caracterisitcs of the parallel procedure
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //Utilisation de MPI_Wtime pour obtenir le temps courant
     
-    Real e_time;
+    Real time;
+    
     if (rank == 0) {
-      e_time = MPI_Wtime();
+      time = MPI_Wtime();
     }
 
 
@@ -89,6 +94,7 @@ int main(int argc, char **argv)
      
      
     int n = atoi(argv[1]);
+    int m = n - 1;
     int avg= n/size;
     int nn = 4 * n;
     
@@ -102,7 +108,7 @@ int main(int argc, char **argv)
     
     // the main process (0) print the size of the problem , the number of processes , the number of threads and the number of rows per process
 
-    if (rank == 0) printf("Grid size: n = %i, Size = %i, Rows per process: avg= %i, Threads: t = %i\n", n, size, avg, t);
+    if (rank == 0) printf("Size: n : %i, P : %i, Threads: t = %i\n", n, size, t);
 
     //Check if size is a power of 2
   	if (!is_pow2(n)) {
@@ -129,10 +135,11 @@ int main(int argc, char **argv)
      * Grid points are generated with constant mesh size on both x- and y-axis.
      */
 
-    Real u_max = 0.0, err_max = 0.0;
+    Real u_max = 0.0;
+    Real error = 0.0;
 
-    Real *x_grid = mk_1D_array(avg, false);
-    Real *y_grid = mk_1D_array(n, false);
+    Real *x_axis = mk_1D_array(avg, false);
+    Real *y_axis = mk_1D_array(n, false);
 
 
     // Modification we talked about, z is now 2D not to use
@@ -148,12 +155,12 @@ int main(int argc, char **argv)
 
       #pragma omp for
       for (size_t i = 0; i < avg; i++) {
-          x_grid[i] = (i + 1 + avg*rank) * h ;
+          x_axis[i] = (i + 1 + avg*rank) * h ;
       }
 
       #pragma omp for
       for (size_t i = 0; i < n+1; i++) {
-          y_grid[i] = (i+1) * h ;
+          y_axis[i] = (i+1) * h ;
       }
 
       #pragma omp for
@@ -165,9 +172,9 @@ int main(int argc, char **argv)
       #pragma omp for collapse(2)
       for (size_t i = 0; i < avg; i++) {
           for (size_t j = 0; j < n; j++) {
-              a_sol[i][j] = sol(x_grid[i], y_grid[j]);
+              a_sol[i][j] = sol(x_axis[i], y_axis[j]);
               // h²*f
-              b[i][j] = h * h * rhs(x_grid[i], y_grid[j]);
+              b[i][j] = h * h * rhs(x_axis[i], y_axis[j]);
           }
         }
 
@@ -249,36 +256,40 @@ int main(int argc, char **argv)
 
       #pragma omp for collapse(2)
         for (size_t i = 0; i < avg; i++) {
-          for (size_t j = 0; j < n-1; j++) {
+          for (size_t j = 0; j < m; j++) {
 			  // fabs <-> absolute value
               err = fabs(b[i][j] - a_sol[i][j]);
               // the formula you used in your serial program
-              err_max = err_max > err ? err_max : err;
+              error = error > err ? error : err;
               u_max = u_max > b[i][j] ? u_max : b[i][j];
             }
         }
     }
 
-    Real u_max_glob = 0;
-    Real err_max_glob = 0;
+    Real u_max_tot = 0;
+    Real err_max_tot = 0;
     
-    MPI_Reduce(&u_max, &u_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&err_max, &err_max_glob, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&u_max, &u_max_tot, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&error, &err_max_tot, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
 	  // we calculate the final time of the program
-      e_time = MPI_Wtime() - e_time ;
+      time = MPI_Wtime() - time ;
       // we print the results
-      printf("u_max = %e\n", u_max_glob);
-      printf("Time elapsed: %f\n", e_time);
-      printf("Max absolute error: %.8f\n\n", err_max_glob);
+      printf("u_max = %e\n", u_max_tot);
+      printf("Time: %f\n", time);
+      printf("Error: %.15f\n\n", err_max_tot);
     }
 	
 	// we assign the third process to print the final matrix
 	// VERIFICATION TEST
-    if (rank == 3) show_matrix(b, avg, n-1);
-
+	/////////////////////////////
+	
+    //if (rank == 3) show_matrix(b, avg, m);
+    
+	/////////////////////////////
 	// We close the MPI routine
+	
     MPI_Finalize();
     
     return 0;
@@ -297,9 +308,8 @@ Real rhs(Real x, Real y) {
     //return 1;
 }
 
-/*
-* This function is used for convergence test of the numerical solution
-*/
+// convergence test
+
 Real sol(Real x, Real y) {
   return sin(PI*x)*sin(2*PI*y);
 }
@@ -345,8 +355,8 @@ Real **mk_2D_array(size_t n1, size_t n2, Bool zero)
     return ret;
 }
 
-void show_matrix(Real **b, int m, int n) {
-   for (int i = 0; i < m; i++) {
+void show_matrix(Real **b, int avg, int n) {
+   for (int i = 0; i < avg; i++) {
       for (int j = 0; j < n; j++) {
          printf("%f ", b[i][j]);
       }
@@ -361,27 +371,27 @@ void show_matrix(Real **b, int m, int n) {
 * array is then unwrapped and origanized back into matrices.
 */
 
-void p_transpose(Real **bt, Real **b, Real *send, Real *recv, int size, int m, int n, int rank) {
+void p_transpose(Real **bt, Real **b, Real *send, Real *recv, int size, int avg, int n, int rank) {
   size_t i, j;
   //#pragma omp parallel for collapse(2)
-  for (i=0; i<(size_t)m; i++) {
+  for (i=0; i<(size_t)avg; i++) {
     for (j=0; j<(size_t)n; j++) {
-      send[m*i + (j/m)*(m*m) + j%m] = b[i][j];
+      send[avg*i + (j/avg)*(avg*avg) + j%avg] = b[i][j];
     }
   }
 
-  MPI_Alltoall(&send[0], m*m, MPI_DOUBLE, &recv[0], m*m, MPI_DOUBLE, MPI_COMM_WORLD);
+  MPI_Alltoall(&send[0], avg*avg, MPI_DOUBLE, &recv[0], avg*avg, MPI_DOUBLE, MPI_COMM_WORLD);
 
-  int cnt = 0;
+  int val = 0;
   for (j=0; j<(size_t)n; j++) {
-    for (i=0; i<(size_t)m; i++) {
-      bt[i][j] = recv[cnt];
-      cnt++;
+    for (i=0; i<(size_t)avg; i++) {
+      bt[i][j] = recv[val];
+      val++;
     }
   }
 }
 
-int is_pow2(int n) {
-  Real l = log(n)/log(2);
-  return floor(l) == l;
+int is_pow2(int a) {
+  Real b = log(a)/log(2);
+  return floor(b) == b;
 }
