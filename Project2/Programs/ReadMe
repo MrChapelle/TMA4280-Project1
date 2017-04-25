@@ -1,9 +1,12 @@
-this is the read me files associated to Project 2
+@ Robin You
+@ Nicolas Houlier
 
-to execute a program you have to change his name in the CMakeList.txt file
+This is the read me files associated to Project 2
+
+To execute a program you have to change his name in the CMakeList.txt file
 just change the name of source code : poisson.c / poisson_mpi.c / poisson_hybrid.c
 
-then : 
+Then : 
 
 module load gcc
 module load openmpi 
@@ -14,13 +17,19 @@ CC=mpicc FC=mpif90 cmake . -DCMAKE_BUILD_TYPE=Release
 
 gmake
 
-then :
+Then :
 
 mpirun -np X ./poisson n Y 
 
 to execute it on X processes , Y threads and with a matrix size of n
 
 maybe mpiexec also works ..
+
+notes:
+if you're running poisson_mpi , you don't put Y, argc has a size equal to 1
+if you're running poisson , just write ./poisson n
+if you're running poisson_hybrid , follow the instruction written before
+
 
 for any questions please contact :
 
