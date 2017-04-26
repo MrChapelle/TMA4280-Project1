@@ -223,11 +223,7 @@ int main(int argc, char **argv)
         fstinv_(b[i], &n, z, &nn);
     }
 
-      /*
-       * Compute maximal value and maximal absolute error of solution for
-       * convergence analysis.
-       */
-
+      
     Real err = 0.0;
 
     //Last value is not considered since it is on the boundary
@@ -280,9 +276,9 @@ int main(int argc, char **argv)
 
 Real rhs(Real x, Real y) {
     //return 2 * (y - y*y + x - x*x);
-    return 5*PI*PI*sin(PI*x)*sin(2*PI*y); // RHS of known solution
+    return 5*PI*PI*sin(PI*x)*sin(2*PI*y); 
     //return exp(x)*sin(2*PI*x)*sin(2*PI*y);
-    //return 1;
+    
 }
 
 // convergence test
@@ -341,12 +337,8 @@ void show_matrix(Real **b, int avg, int n) {
    }
 }
 
-/*
-* Method that transpose a matrix in parallel. The values in the matrices of
-* each process is packed into a 1D array according to the provided figure
-* (Figure 0.1) in the problem description. When recived the values from the 1D
-* array is then unwrapped and origanized back into matrices.
-*/
+// function that realise the transposition of a matrix 
+// in a parallel way
 
 void p_transpose(Real **bt, Real **b, Real *send, Real *recv, int size, int avg, int n, int rank) {
   size_t i;
